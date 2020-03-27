@@ -3,48 +3,58 @@ JsonrpcKey = 'rrsyycm'; //Aria2jsonrpc密钥
 SecretKey = '此处填写通讯密钥'; //与捷径的通讯密钥
 PhantomjsPort = 4363; //Phantomjs与捷径的通讯端口
 Functions = {
-  "电影": {
-    "Select": "Video",
-    "Down": "VideoDown",
-    "Dir": "\/video",
-    "Msg": "请输入影视名称"
-  },
-  "音乐": {
-    "Select": "Music",
-    "Down": "MusicDown",
-    "Dir": "\/music",
-    "Msg": "请输入音乐名"
-  },
   "P站": {
     "Select": "PornHub",
     "Down": "PornHubDown",
-    "Dir": "\/pornhub"
+    "Dir": "\/pornhub",
+    "Msg": "请输P站链接，或浏览器分享到本捷径 数据格式：Url链接"
   },
-  "下载": {
-    "Select": "Down",
-    "Dir": "\/data",
-    "Msg": "请输入链接地址"
+  "电影": {
+    "Select": "Video", //首次获取信息列表函数名。
+    "Down": "VideoDown", //接收ios捷径选择的信息，并对信息处理，返回结果。
+    "Dir": "\/video", //Aria2下载地址
+    "Msg": "请输入影视名称 数据格式：影视名" //提示信息
   },
   "使用指南": {
     "Select": "Guide",
     "Msg": "http:\/\/wan7.xin\/nasjiejing.html"
   },
-  "退出服务端": {
+  "下载": {
+    "Select": "Down",
+    "Dir": "\/data",
+    "Msg": "请输入链接地址 数据格式：Url链接"
+  },
+  "退出服务": {
     "Select": "Quit",
     "Msg": "退出Phantomjs服务，退出后将无法使用此捷径。"
+  },
+  "音乐": {
+    "Select": "Music",
+    "Down": "MusicDown",
+    "Dir": "\/music",
+    "Msg": "请输入音乐名 数据格式：音乐名"
   }
 }; //方法配置
 //Phantomjs
 var server = require('webserver').create();
 var page = require('webpage').create();
+// page.settings.resourceTimeout = 20000;
+page.settings.loadImages = false;
+//不加载css
+page.onResourceRequested = function(requestData, networkRequest) {
+  var match = requestData.url.match(/\/\/.*.css/g);
+  if (match != null) {
+    networkRequest.cancel(); // or .abort()
+  }
+};
 console.log('初始化完毕');
 var service = server.listen(PhantomjsPort, function(request, response) {
-  KjPost = JSON.parse(request.post);
+  Ios = JSON.parse(request.post);
   console.log('--------------------------Start--------------------------')
   var StartTime = new Date();
-  console.log(StartTime.toJSON(), KjPost['fun'], KjPost['url'])
-  if (KjPost['secretkey'] != md5(SecretKey)) {
-    console.log('密钥错误:' + KjPost['secretkey']);
+  console.log(StartTime.toJSON(), Ios['fun'], Ios['url'])
+  if (Ios['secretkey'] != md5(SecretKey)) {
+    console.log('密钥错误:' + Ios['secretkey']);
     response.statusCode = 200;
     response.write(JSON.stringify({
       "info": "error",
@@ -52,7 +62,7 @@ var service = server.listen(PhantomjsPort, function(request, response) {
     }));
     response.close();
   } else {
-    Nas[KjPost.fun](request, response);
+    Nas[Ios.fun](request, response);
   }
   console.log('---------------------------------------------------------')
 });
@@ -64,28 +74,25 @@ var Nas = {
     response.close();
   },
   'Video': function(request, response) {
-    //获取匹配的视频
-    KjPost = JSON.parse(request.post)
-    console.log(KjPost['url']);
-    var url = 'https://www.tlyy.cc/search.asp?searchword=' + urlEncode(KjPost['url']);
-    console.log(url);
-    page.open(url, function() {
-      page.includeJs("https://cdn.bootcss.com/jquery/3.4.1/jquery.js", function() {
-        var list = page.evaluate(function() {
-          var VideoInfoList = {};
-          $(".watch li").each(function(index) {
-            var item = {
+    var url = 'https://www.tlyy.cc/search.asp?searchword=' + urlEncode(JSON.parse(request.post)['url']); //生成链接urlEncode对字符串进行urlGb2312编码
+    console.log(url); //打印url到控制台
+    page.open(url, function() { //打开Url并获取信息
+      page.includeJs("https://cdn.bootcss.com/jquery/3.4.1/jquery.js", function() { //引入jquery方便对元素操作
+        var list = page.evaluate(function() { //在网页内运行脚本
+          var VideoInfoList = {}; //定义一个存储信息对象
+          $(".watch li").each(function(index) { //遍历clss为watch的li标签
+            var item = { //将获取到的标题与url保存到变量
               name: $(this).children("h4").children("a")[0].text,
               url: $(this).children("h4").children("a")[0].href
             }
-            VideoInfoList[item.name] = item;
+            VideoInfoList[item.name] = item; //将获取得到的信息存入对象
           });
-          console.log(JSON.stringify(VideoInfoList));
-          return JSON.stringify(VideoInfoList);
+          console.log(JSON.stringify(VideoInfoList)); //将对象转换为json字符串并打印到控制台
+          return JSON.stringify(VideoInfoList); //返回信息
         });
-        response.statusCode = 200;
-        response.write(list);
-        response.close();
+        response.statusCode = 200; //回应给捷径请求无措
+        response.write(list); //回应给捷径获取到的信息
+        response.close(); //关闭与捷径的通讯
       });
     });
     return
@@ -228,7 +235,7 @@ var Nas = {
   'Quit': function(request, response) {
     response.statusCode = 200;
     response.write(JSON.stringify({
-      "info": "ok",
+      "info": "error",
       "msg": "已经退出服务端"
     }));
     response.close();
@@ -267,6 +274,7 @@ var Nas = {
         response.write(JSON.stringify(list));
         response.close();
       }
+      MusicPage.close();
     })
     MusicPage.onConsoleMessage = function(msg) {
       console.log(msg);
@@ -304,14 +312,8 @@ var Nas = {
         }));
         response.close();
       }
+      MusicDown.close();
     })
-  }
-};
-//不加载css
-page.onResourceRequested = function(requestData, networkRequest) {
-  var match = requestData.url.match(/\/\/.*.css/g);
-  if (match != null) {
-    networkRequest.cancel(); // or .abort()
   }
 };
 //url编码解码
